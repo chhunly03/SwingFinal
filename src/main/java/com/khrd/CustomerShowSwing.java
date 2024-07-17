@@ -4,12 +4,10 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.util.List;
-import java.util.ArrayList;
+import java.sql.*;
 
 public class CustomerShowSwing extends JFrame {
-    private List<Customer> customers;
-    private int currentIndex;
+    private int currentId = -1;
 
     private final JTextField idField;
     private final JTextField lastNameField;
@@ -25,7 +23,6 @@ public class CustomerShowSwing extends JFrame {
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setLocationRelativeTo(null);
         setLayout(new GridLayout(5, 2));
-
 
         JLabel idLabel = new JLabel("Customer ID:");
         idField = new JTextField();
@@ -70,25 +67,66 @@ public class CustomerShowSwing extends JFrame {
         add(previousButton);
         add(nextButton);
 
-        loadCustomerData();
-        showRecord(0);
+        showNextRecord();
 
         setVisible(true);
     }
 
-    private void loadCustomerData() {
-        customers = new ArrayList<>();
-        customers.add(new Customer(1, "Chhunly", "Chorn", "085787179"));
-        customers.add(new Customer(2, "Seng", "Thiarong", "071558809"));
-        customers.add(new Customer(3, "Erling", "Haaland", "0975032729"));
-        customers.add(new Customer(4, "Chhan", "Bunthorn", "071558822"));
+    private Customer getCustomer(int id, boolean isNext) {
+        Customer customer = null;
+        Connection connection = null;
+        PreparedStatement statement = null;
+        ResultSet resultSet = null;
 
-        currentIndex = 0;
+        try {
+            String url = "jdbc:postgresql://localhost:5432/customer_db";
+            String user = "postgres";
+            String password = "1111@2222@";
+
+            Class.forName("org.postgresql.Driver");
+            connection = DriverManager.getConnection(url, user, password);
+
+            if (isNext) {
+                if (id == -1) {
+                    statement = connection.prepareStatement("SELECT * FROM customers ORDER BY customer_id LIMIT 1");
+                } else {
+                    statement = connection.prepareStatement("SELECT * FROM customers WHERE customer_id > ? ORDER BY customer_id LIMIT 1");
+                    statement.setInt(1, id);
+                }
+            } else {
+                statement = connection.prepareStatement("SELECT * FROM customers WHERE customer_id < ? ORDER BY customer_id DESC LIMIT 1");
+                statement.setInt(1, id);
+            }
+
+            resultSet = statement.executeQuery();
+
+            if (resultSet.next()) {
+                int customerId = resultSet.getInt("customer_id");
+                String lastName = resultSet.getString("customer_last_name");
+                String firstName = resultSet.getString("customer_first_name");
+                String phone = resultSet.getString("customer_phone");
+                customer = new Customer(customerId, lastName, firstName, phone);
+            }
+
+        } catch (SQLException | ClassNotFoundException e) {
+            JOptionPane.showMessageDialog(this, "Error loading customer data: " + e.getMessage());
+            e.printStackTrace();
+        } finally {
+            try {
+                if (resultSet != null) resultSet.close();
+                if (statement != null) statement.close();
+                if (connection != null) connection.close();
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
+        }
+
+        return customer;
     }
 
-    private void showRecord(int index) {
-        if (index >= 0 && index < customers.size()) {
-            Customer customer = customers.get(index);
+    private void showRecord(Customer customer) {
+        if (customer != null) {
+            currentId = customer.customerId();
             idField.setText(String.valueOf(customer.customerId()));
             lastNameField.setText(customer.lastName());
             firstNameField.setText(customer.firstName());
@@ -97,18 +135,18 @@ public class CustomerShowSwing extends JFrame {
     }
 
     private void showNextRecord() {
-        if (currentIndex < customers.size() - 1) {
-            currentIndex++;
-            showRecord(currentIndex);
+        Customer customer = getCustomer(currentId, true);
+        if (customer != null) {
+            showRecord(customer);
         } else {
             JOptionPane.showMessageDialog(this, "This is the last record.");
         }
     }
 
     private void showPreviousRecord() {
-        if (currentIndex > 0) {
-            currentIndex--;
-            showRecord(currentIndex);
+        Customer customer = getCustomer(currentId, false);
+        if (customer != null) {
+            showRecord(customer);
         } else {
             JOptionPane.showMessageDialog(this, "This is the first record.");
         }
